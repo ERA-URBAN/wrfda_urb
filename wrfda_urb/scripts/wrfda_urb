@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+
+'''
+description:    Create a db entry for a VOEvent: Runner
+license:        APACHE 2.0
+author:         Ronald van Haren, NLeSC (r.vanharen@esciencecenter.nl)
+'''
+
+import argparse
+from wrfda_urb import slucm_da as slucmda
+
+def cli_parser():
+    '''
+    parse command line arguments:
+        should be single/multiple valid VOEvent xml files
+    '''
+    parser = argparse.ArgumentParser(description='Run wrfda-urb on the '
+                                     'supplied netcdf files (wrfinput, wrfout)')
+    parser.add_argument('wrfinput', metavar='wrfinput',
+                        type=argparse.FileType('rb'), nargs='+',
+                        help='List of netcdf files')
+    results = vars(parser.parse_args())['wrfinput']
+    return results
+
+
+if __name__=="__main__":
+    arguments = cli_parser()
+    slucmda.slucm(arguments[0].name, arguments[1].name)
