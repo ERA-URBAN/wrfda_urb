@@ -5,9 +5,9 @@
 
 # implement slucm subroutine for data assimilation on WRF slucm
 
-from mos import mos
-from multi_layer import multi_layer
-from sfcdif_urb import sfcdif_urb
+from wrfda_urb.mos import mos
+from wrfda_urb.multi_layer import multi_layer
+from wrfda_urb.sfcdif_urb import sfcdif_urb
 from netCDF4 import Dataset
 import numpy
 
@@ -26,26 +26,28 @@ class slucm:
   def read_netcdf(self, netcdffile, wrfout):
     ncfile = Dataset(netcdffile, 'r')
     ncfile2 = Dataset(wrfout, 'r')
-    self.TA = ncfile.variables['T'][0,0,:] + ncfile.variables['T00'][0]
-    self.QA = ncfile.variables['QVAPOR'][0,0,:]
-    self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1]**2) +
-                         (ncfile.variables['V'][0,0,:-1,:]**2))
-    self.SSG = ncfile2.variables['SWDOWN'][0,]
-    self.LLG = ncfile2.variables['GLW'][0,:]
-    self.TRP = ncfile.variables['TR_URB'][0,:]
-    self.TGP = ncfile.variables['TG_URB'][0,:]
-    self.TCP = ncfile.variables['TC_URB'][0,:]
-    self.TBP = ncfile.variables['TB_URB'][0,:]
-    self.QCP = ncfile.variables['QC_URB'][0,:]
-    self.PS = ncfile.variables['PSFC'][0,:]
-    self.STDH_URB = ncfile.variables['STDH_URB2D'][0,:]
+    self.landuse = ncfile.variables['LU_INDEX'][0,:]
+    self.urban = numpy.where(self.landuse == 1)
+    self.TA = ncfile.variables['T'][0,0,:][self.urban] + ncfile.variables['T00'][0]
+    self.QA = ncfile.variables['QVAPOR'][0,0,:][self.urban]
+    self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1][self.urban]**2) +
+                         (ncfile.variables['V'][0,0,:-1,:][self.urban]**2))
+    self.SSG = ncfile2.variables['SWDOWN'][0,:][self.urban]
+    self.LLG = ncfile2.variables['GLW'][0,:][self.urban]
+    self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
+    self.TGP = ncfile.variables['TG_URB'][0,:][self.urban]
+    self.TCP = ncfile.variables['TC_URB'][0,:][self.urban]
+    self.TBP = ncfile.variables['TB_URB'][0,:][self.urban]
+    self.QCP = ncfile.variables['QC_URB'][0,:][self.urban]
+    self.PS = ncfile.variables['PSFC'][0,:][self.urban]
+    self.STDH_URB = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.RAIN = numpy.zeros(numpy.shape(self.LLG))  # TODO: fix
     self.RHOO = 1.25 * numpy.ones(numpy.shape(self.LLG))
     self.RHO = self.RHOO * 0.001
-    self.ZA = (ncfile.variables['PH'][0,0,:] + ncfile.variables['PHB'][0,0,:])/9.81
-    #self.COSZ = ncfile.variables['COSZEN'][0,:]
+    self.ZA = (ncfile.variables['PH'][0,0,:][self.urban] + ncfile.variables['PHB'][0,0,:][self.urban])/9.81
+    #self.COSZ = ncfile.variables['COSZEN'][0,:][self.urban]
     self.DELT = 60
-    self.ZR = ncfile.variables['MH_URB2D'][0,:]
+    self.ZR = ncfile.variables['MH_URB2D'][0,:][self.urban]
     self.ZDC = 0.2 * self.ZR  # TODO: calculate self.SDC?
     self.Z0C = 0.1 * self.ZR # TODO: calculate
     self.Z0HC = 0.1 * self.Z0C # TODO: calculate
@@ -69,11 +71,10 @@ class slucm:
     self.CHR_URB = 0.1
     self.CMC_URB = 0.1
     self.CHC_URB = 0.1
-    #self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:]
+    #self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.XXXB = numpy.zeros(numpy.shape(self.ZR))  # update registry
     self.XXXG = numpy.zeros(numpy.shape(self.ZR)) # update registry
     self.TC2Min = ncfile2.variables['TC2M_URB'][1,:]
-
     ncfile.close()
 
 
@@ -118,9 +119,16 @@ class slucm:
     self.ahoption=0
     self.alhoption=0
 
+  def return_original_shape(self, values, indices, shape):
+    '''
+    desc
+    '''
+    out = numpy.zeros(shape)
+    out[indices] = values
+    return out
+
   def canopy_wind(self):
     building_lower = self.ZR + 2.0 < self.ZA
-
     self.UR = self.UA * numpy.log((self.ZR - self.ZDC)/self.Z0C
                                   )/numpy.log((self.ZA-self.ZDC)/self.Z0C)
     self.ZC = 0.7 * self.ZR
@@ -562,5 +570,5 @@ class slucm:
     PSIH2M[~boolean] = (2.*numpy.log((1.+X*X)/2.))[~boolean]
 
     RAH = 1./(self.AK*numpy.sqrt(self.CDC*self.UA*self.UA))*(numpy.log(self.ZA/2.)-PSIHZA+PSIH2M)
-    self.TC2M = self.TA + RAH*(self.W/self.RW*FLXTHB+FLXTHG)
-
+    TC2M = self.TA + RAH*(self.W/self.RW*FLXTHB+FLXTHG)
+    self.TC2M = self.return_original_shape(TC2M, self.urban, numpy.shape(self.TC2Min))
