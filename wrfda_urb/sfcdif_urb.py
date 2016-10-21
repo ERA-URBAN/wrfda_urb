@@ -65,7 +65,7 @@ def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS,RLMO):
   DTHV = THLM - THZ0
 
   # BELJARS CORRECTION OF USTAR
-  DU2 = numpy.max(SFCSPD * SFCSPD,EPSU2)
+  DU2 = numpy.maximum(SFCSPD * SFCSPD,EPSU2)
   # If statements to avoid TANGENT LINEAR problems near zero
   BTGH = BTG * HPBL
   
@@ -75,7 +75,7 @@ def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS,RLMO):
   WSTAR2[~boolean] = 0.0
 
   # ZILITINKEVITCH APPROACH FOR ZT
-  USTAR = numpy.max(numpy.sqrt(AKMS * numpy.sqrt(DU2+ WSTAR2)),EPSUST)
+  USTAR = numpy.maximum(numpy.sqrt(AKMS * numpy.sqrt(DU2+ WSTAR2)),EPSUST)
 
   # KCL/TL Try Kanda approach instead (Kanda et al. 2007, JAMC)
   ZT = numpy.exp(2.0-AKANDA*(SQVISC**2 * USTAR * Z0)**0.25)* Z0

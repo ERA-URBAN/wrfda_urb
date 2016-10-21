@@ -26,7 +26,7 @@ class slucm:
   def read_netcdf(self, netcdffile, wrfout):
     ncfile = Dataset(netcdffile, 'r')
     ncfile2 = Dataset(wrfout, 'r')
-    self.TA = ncfile.variables['T'][0,0,:] + ncfile.variables['T00'][0]  + 2
+    self.TA = ncfile.variables['T'][0,0,:] + ncfile.variables['T00'][0]
     self.QA = ncfile.variables['QVAPOR'][0,0,:]
     self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1]**2) +
                          (ncfile.variables['V'][0,0,:-1,:]**2))
@@ -233,7 +233,7 @@ class slucm:
 
         self.TR = self.TRP - DTR
         self.TRP = self.TR
-        if ((numpy.max(abs(F)) < 0.000001) and (numpy.max(abs(DTR)) < 0.000001)):
+        if ((numpy.max(abs(F), axis=None) < 0.000001) and (numpy.max(abs(DTR), axis=None) < 0.000001)):
           break
       self.TRL = multi_layer(self.num_roof_layers,
                              self.BOUNDR,self.G0R,self.CAPR,self.AKSR,
@@ -406,9 +406,9 @@ class slucm:
         self.TCP = self.TC
         self.QCP = self.QC
 
-        if ((numpy.max(abs(F)) < 0.000001) and (numpy.max(abs(DTB)) < 0.000001)
-            and (numpy.max(abs(GF)) < 0.000001) and (numpy.max(abs(DTG)) < 0.000001)
-            and (numpy.max(abs(DTC)) < 0.000001)):
+        if ((numpy.max(abs(F), axis=None) < 0.000001) and (numpy.max(abs(DTB), axis=None) < 0.000001)
+            and (numpy.max(abs(GF), axis=None) < 0.000001) and (numpy.max(abs(DTG), axis=None) < 0.000001)
+            and (numpy.max(abs(DTC), axis=None) < 0.000001)):
           break
 
       self.TBL = multi_layer(self.num_wall_layers,self.BOUNDB,
