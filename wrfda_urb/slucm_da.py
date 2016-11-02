@@ -42,19 +42,20 @@ class slucm:
     self.QA = ncfile.variables['QVAPOR'][0,0,:][self.urban]
     self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1][self.urban]**2) +
                          (ncfile.variables['V'][0,0,:-1,:][self.urban]**2))
-    self.SSG = ncfile2.variables['SWDOWN'][0,:][self.urban]
-    self.LLG = ncfile2.variables['GLW'][0,:][self.urban]
+    self.SSG = ncfile2.variables['SWDOWN'][1,:][self.urban]
+    self.LLG = ncfile2.variables['GLW'][1,:][self.urban]
     self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
     self.TGP = ncfile.variables['TG_URB'][0,:][self.urban]
     self.TCP = ncfile.variables['TC_URB'][0,:][self.urban]
     self.TBP = ncfile.variables['TB_URB'][0,:][self.urban]
     self.QCP = ncfile.variables['QC_URB'][0,:][self.urban]
+    self.Hin = ncfile2.variables['SH_URB'][1,:][self.urban]
     self.PS = ncfile.variables['PSFC'][0,:][self.urban]
     self.STDH_URB = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.RAIN = numpy.zeros(numpy.shape(self.LLG))  # TODO: fix
     self.RHOO = 1.225 * numpy.ones(numpy.shape(self.LLG))
     self.RHO = self.RHOO * 0.001  # density of air [g/cm3]
-    self.ZA = (ncfile.variables['PH'][0,0,:][self.urban])/9.81 + (ncfile.variables['PHB'][0,0,:][self.urban])/9.81
+    self.ZA = (ncfile.variables['PH'][0,1,:][self.urban])/9.81 + (ncfile.variables['PHB'][0,1,:][self.urban])/9.81
     self.ZA[self.ZA<0] = 0  # cannot be lower than 0
     #self.COSZ = ncfile.variables['COSZEN'][0,:][self.urban]
     self.DELT = 60
@@ -74,9 +75,13 @@ class slucm:
     self.DZB = [5.,5.,5.,5.]
     self.DZG = [5.,20.,25.,25.]
     self.ANTHEAT = 0.
-    self.TRL = [293.00, 293.00, 293.00, 293.00]
-    self.TBL = [293.00, 293.00, 293.00, 293.00]
-    self.TGL = [293.00, 293.00, 293.00, 293.00]
+   # TODO fix to real values from wrfinput
+   self.TRL = [self.TRP[50,50], self.TRP[50,50]-1,
+               self.TRP[50,50]-5,self.TRP[50,50]-20]
+   self.TBL = [self.TBP[50,50], self.TBP[50,50]-1,
+               self.TBP[50,50]-5, self.TBP[50,50]-20]
+   self.TGL = [self.TGP[50,50], self.TGP[50,50]-1,
+               self.TGP[50,50]-5,self.TGP[50,50]-20] 
     #self.CMR_URB = ncfile.variables['CMR_SFCDIF']
     #self.CHR_URB = ncfile.variables['CHR_SFCDIF']
     #self.CMC_URB = ncfile.variables['CMC_SFCDIF']
