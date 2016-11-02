@@ -56,7 +56,6 @@ class slucm:
     self.RHOO = 1.225 * numpy.ones(numpy.shape(self.LLG))
     self.RHO = self.RHOO * 0.001  # density of air [g/cm3]
     self.ZA = (ncfile.variables['PH'][0,1,:][self.urban])/9.81 + (ncfile.variables['PHB'][0,1,:][self.urban])/9.81
-    self.ZA[self.ZA<0] = 0  # cannot be lower than 0
     #self.COSZ = ncfile.variables['COSZEN'][0,:][self.urban]
     self.DELT = 60
     self.ZR = ncfile.variables['MH_URB2D'][0,:][self.urban]
@@ -75,21 +74,21 @@ class slucm:
     self.DZB = [5.,5.,5.,5.]
     self.DZG = [5.,20.,25.,25.]
     self.ANTHEAT = 0.
-   # TODO fix to real values from wrfinput
-   self.TRL = [self.TRP[50,50], self.TRP[50,50]-1,
-               self.TRP[50,50]-5,self.TRP[50,50]-20]
-   self.TBL = [self.TBP[50,50], self.TBP[50,50]-1,
-               self.TBP[50,50]-5, self.TBP[50,50]-20]
-   self.TGL = [self.TGP[50,50], self.TGP[50,50]-1,
-               self.TGP[50,50]-5,self.TGP[50,50]-20] 
+    # TODO fix to real values from wrfinput
+    self.TRL = [numpy.mean(self.TRP), numpy.mean(self.TRP)-1,
+                numpy.mean(self.TRP)-5, numpy.mean(self.TRP)-20]
+    self.TBL = [numpy.mean(self.TBP), numpy.mean(self.TBP)-1,
+                numpy.mean(self.TBP)-5, numpy.mean(self.TBP)-20]
+    self.TGL = [numpy.mean(self.TGP), numpy.mean(self.TGP)-1,
+                numpy.mean(self.TGP)-5, numpy.mean(self.TGP)-20]
     #self.CMR_URB = ncfile.variables['CMR_SFCDIF']
     #self.CHR_URB = ncfile.variables['CHR_SFCDIF']
     #self.CMC_URB = ncfile.variables['CMC_SFCDIF']
     #self.CHC_URB = ncfile.variables['CHC_SFCDIF']
-    self.CMR_URB = 0.1
-    self.CHR_URB = 0.1
-    self.CMC_URB = 0.1
-    self.CHC_URB = 0.1
+    self.CMR_URB = 0.3
+    self.CHR_URB = 0.3
+    self.CMC_URB = 0.3
+    self.CHC_URB = 0.3
     #self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.XXXB = numpy.zeros(numpy.shape(self.ZR))  # update registry
     self.XXXG = numpy.zeros(numpy.shape(self.ZR)) # update registry
@@ -292,7 +291,7 @@ class slucm:
                           TH2V,self.UA,self.AKANDA_URBAN,
                           self.CMC_URB,self.CHC_URB)
     ALPHAC = self.RHO * self.CP * self.CHC_URB
-    self.CH_SCHEME = 0 # TODO: hardcode for now
+    self.CH_SCHEME = 1 # TODO: hardcode for now
     if (self.CH_SCHEME == 1):
       Z = self.ZDC
       BHB=numpy.log(self.Z0B/self.Z0HB)/0.4
@@ -545,6 +544,7 @@ class slucm:
     # diagnostic GRID AVERAGED  PSIM  PSIH  TS QS --> WRF
     Z0 = self.Z0C
     Z0H = self.Z0HC
+    
     Z = self.ZA - self.ZDC
     ZNT = Z0
     XXX = 0.4*9.81*Z*TST/self.TA/UST/UST
@@ -653,6 +653,8 @@ class slucm:
 
     #nmin = nanmin(self.TC2M[self.TC2M>0], axis=None)
     #nmax = nanmax(self.TC2M[self.TC2M>0], axis=None)
-    #contourf(range(0,120),range(0,120),self.TC2M, numpy.arange(nmin,nmax,0.01))
+    #print(numpy.nanmean(SH), nmin, nmax)
+    #contourf(range(0,120),range(0,120),self.TC2M-self.TC2Min, numpy.arange(-2,2,0.01))
+    #self.ZA = self.return_original_shape(self.ZA, self.urban, numpy.shape(self.TC2Min))
     #colorbar()
     #show()
