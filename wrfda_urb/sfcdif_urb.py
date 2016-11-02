@@ -32,7 +32,7 @@ def PSPHU(XX):
 def PSPHS(YY):
   return 5.* YY
 
-def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS,RLMO):
+def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS):
   '''
   CALCULATE SURFACE LAYER EXCHANGE COEFFICIENTS VIA ITERATIVE PROCESS.
   SEE CHEN ET AL (1997, BLM)
@@ -116,6 +116,7 @@ def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS,RLMO):
       SIMM[~unstable] = (PSPMS(ZETALU) - PSMZ + RLOGU)[~unstable]
       PSHZ[~unstable] = PSPHS(ZETAT)[~unstable]
       SIMH[~unstable] = (PSPHS(ZETALT) - PSHZ + RLOGT)[~unstable]
+      
     else:
       # LECH's functions
       # unstable
@@ -146,4 +147,4 @@ def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS,RLMO):
 
   CD = USTAR*USTAR/SFCSPD**2
   
-  return CD
+  return CD, RLMO
