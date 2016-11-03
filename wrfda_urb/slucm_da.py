@@ -25,6 +25,7 @@ class slucm:
   def __init__(self, netcdffile, wrfout):
     self.set_constants()
     self.read_netcdf(netcdffile, wrfout)
+    self.urbparam_init()
     self.canopy_wind()
     self.net_shortwave_ratiation()
     for ii in range(0,2):
@@ -38,10 +39,9 @@ class slucm:
     ncfile2 = Dataset(wrfout, 'r')
     self.landuse = ncfile.variables['LU_INDEX'][0,:]
     self.urban = numpy.where(self.landuse == 1)
-    self.TA = ncfile.variables['T'][0,0,:][self.urban] + ncfile.variables['T00'][0]
     self.QA = ncfile.variables['QVAPOR'][0,0,:][self.urban]
-    self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1][self.urban]**2) +
-                         (ncfile.variables['V'][0,0,:-1,:][self.urban]**2))
+    self.UA = numpy.sqrt((ncfile.variables['U'][0,1,:,:-1][self.urban]**2) +
+                         (ncfile.variables['V'][0,1,:-1,:][self.urban]**2))
     self.SSG = ncfile2.variables['SWDOWN'][1,:][self.urban]
     self.LLG = ncfile2.variables['GLW'][1,:][self.urban]
     self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
@@ -51,6 +51,8 @@ class slucm:
     self.QCP = ncfile.variables['QC_URB'][0,:][self.urban]
     self.Hin = ncfile2.variables['SH_URB'][1,:][self.urban]
     self.PS = ncfile.variables['PSFC'][0,:][self.urban]
+    # total potential temperature = T+300 WRF ARW user guide
+    self.TA = (ncfile.variables['T'][0,1,:][self.urban] + 300)
     self.STDH_URB = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.RAIN = numpy.zeros(numpy.shape(self.LLG))  # TODO: fix
     self.RHOO = 1.225 * numpy.ones(numpy.shape(self.LLG))
@@ -59,9 +61,6 @@ class slucm:
     #self.COSZ = ncfile.variables['COSZEN'][0,:][self.urban]
     self.DELT = 60
     self.ZR = ncfile.variables['MH_URB2D'][0,:][self.urban]
-    self.ZDC = 0.2 * self.ZR  # TODO: calculate self.SDC?
-    self.Z0C = 0.1 * self.ZR # TODO: calculate
-    self.Z0HC = 0.1 * self.Z0C # TODO: calculate
     self.LSOLAR = False
     self.UTYPE = 4
     self.TRLEND = 293
@@ -74,25 +73,25 @@ class slucm:
     self.DZB = [5.,5.,5.,5.]
     self.DZG = [5.,20.,25.,25.]
     self.ANTHEAT = 0.
-    # TODO fix to real values from wrfinput
-    self.TRL = [numpy.mean(self.TRP), numpy.mean(self.TRP)-1,
-                numpy.mean(self.TRP)-5, numpy.mean(self.TRP)-20]
-    self.TBL = [numpy.mean(self.TBP), numpy.mean(self.TBP)-1,
-                numpy.mean(self.TBP)-5, numpy.mean(self.TBP)-20]
-    self.TGL = [numpy.mean(self.TGP), numpy.mean(self.TGP)-1,
-                numpy.mean(self.TGP)-5, numpy.mean(self.TGP)-20]
-    #self.CMR_URB = ncfile.variables['CMR_SFCDIF']
-    #self.CHR_URB = ncfile.variables['CHR_SFCDIF']
-    #self.CMC_URB = ncfile.variables['CMC_SFCDIF']
-    #self.CHC_URB = ncfile.variables['CHC_SFCDIF']
-    self.CMR_URB = 0.3
-    self.CHR_URB = 0.3
-    self.CMC_URB = 0.3
-    self.CHC_URB = 0.3
-    #self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
+    self.TRL = [ncfile.variables['TRL_URB'][0,:][idx][self.urban]
+                for idx in range(0,4)]
+    self.TBL = [ncfile.variables['TBL_URB'][0,:][idx][self.urban]
+                for idx in range(0,4)]
+    self.TGL = [ncfile.variables['TGL_URB'][0,:][idx][self.urban]
+                for idx in range(0,4)]
+    self.CMR_URB = ncfile2.variables['CMR_SFCDIF'][1,:][self.urban]
+    self.CHR_URB = ncfile2.variables['CHR_SFCDIF'][1,:][self.urban]
+    self.CMC_URB = ncfile2.variables['CMC_SFCDIF'][1,:][self.urban]
+    self.CHC_URB = ncfile2.variables['CHC_SFCDIF'][1,:][self.urban]
+    self.Lambda_P = ncfile.variables['BUILD_AREA_FRACTION'][0,:][self.urban]
+    self.urbfrac = ncfile.variables['FRC_URB2D'][0,:][self.urban]
+    self.Lambda_F = [ncfile.variables['LF_URB2D'][0,:][idx][self.urban]
+                     for idx in range(0,4)]/self.urbfrac
+    self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.XXXB = numpy.zeros(numpy.shape(self.ZR))  # update registry
     self.XXXG = numpy.zeros(numpy.shape(self.ZR)) # update registry
     self.TC2Min = ncfile2.variables['TC2M_URB'][1,:]
+    self.lb_urb = ncfile.variables['BUILD_SURF_RATIO'][0,:][self.urban]
     ncfile.close()
 
 
@@ -116,6 +115,7 @@ class slucm:
     self.road_width = 9.4  # TODO: calculate
     self.roof_width = 9.4  # TODO: calculate
     self.beta_macd = 1
+    self.alpha_macd = 4.43
     self.Cd = 1.2
     self.AKANDA_URBAN = 1.29  # get from urbparam
     self.EPSR = 0.9 # get from urbparam
@@ -162,14 +162,30 @@ class slucm:
 #      self.ZC = self.ZA / 2.0
 #      self.UC = self.UA / 2.0
 
+  def urbparam_init(self):
+    SIGMA_ZED = self.STDH_URB
+    self.Lambda_F = numpy.mean(self.Lambda_F, axis=0)
+    # Clamp between 10 cm and 20 m
+    self.HNORM = 2. * self.ZR * self.urbfrac  / (self.lb_urb - self.Lambda_P)
+    # TODO: check if this is correct
+    self.HNORM[self.HNORM<self.ZR] = self.ZR[self.HNORM<self.ZR]
+    self.HNORM = numpy.maximum( 0.01, numpy.minimum( 100.0, self.HNORM ) )
+    self.HNORM[numpy.isnan(self.HNORM)] = 10
+    Lambda_FR = numpy.maximum( 0.05, numpy.minimum( 0.35, self.stdh_urb/self.HNORM ) )
+    #Lambda_FR  = SIGMA_ZED / ( self.road_width + self.roof_width )
+    self.ZDC = self.ZR * (1.0 + (self.alpha_macd ** (-self.Lambda_P)) * (self.Lambda_P - 1.0))
+    self.Z0C = self.ZR * (1.0 - (self.ZDC/self.ZR)) * numpy.exp(
+      -(0.5 * self.beta_macd * self.Cd / (self.VKMC**2) * (1.0-self.ZDC/self.ZR)*self.Lambda_F)**(-0.5))
+    self.Z0R = self.ZR * ( 1.0 - self.ZDC/self.ZR ) * numpy.exp(
+      -(0.5 * self.beta_macd * self.Cd / (self.VKMC**2) * ( 1.0-self.ZDC/self.ZR) * Lambda_FR )**(-0.5))
+    self.Z0HC = 0.1 * self.Z0C
 
   def net_shortwave_ratiation(self):
     boolean = (self.ZDC+self.Z0C+2 > self.ZA)
     #self.ZDC[boolean] = (self.ZA-self.Z0C -4)[boolean]
     self.SX = self.SSG/697.7/60.  # downward shortwave radiation [ly/min]
     self.RX = self.LLG/697.7/60.  # download longwave radiation [ly/min]
-    HNORM = 10.0  # TODO? calculate
-    self.HGT = self.ZR / HNORM # normalized height
+    self.HGT = self.ZR / self.HNORM # normalized height
     self.R = self.roof_width/(self.road_width+self.roof_width)  # average normalized width streets
     self.RW = 1 - self.R  # canyon width
     self.W = 2.*1.*self.HGT
@@ -217,11 +233,6 @@ class slucm:
     T1VR = self.TRP * (1.0 + 0.61 * self.QA)
     TH2V = (self.TA + (0.0098 * self.ZA)) * (1.0 + 0.61 * self.QA)
     # note that CHR_URB contains UA (=CHR_MOS*UA)
-    ###
-    SIGMA_ZED = self.STDH_URB
-    Lambda_FR  = SIGMA_ZED / ( self.road_width + self.roof_width )
-    self.Z0R = self.ZR * ( 1.0 - self.ZDC/self.ZR ) * numpy.exp(
-      -(0.5 * self.beta_macd * self.Cd / (self.AK**2) * ( 1.0-self.ZDC/self.ZR) * Lambda_FR )**(-0.5))
     self.CDR, self.RLMO_CAN = sfcdif_urb(self.ZA,self.Z0R,T1VR,TH2V,
                                          self.UA,self.AKANDA_URBAN,self.CMR_URB,
                                          self.CHR_URB)
@@ -282,7 +293,6 @@ class slucm:
       self.TRP=self.TR
     self.FLXTHR = self.HR/self.RHO/self.CP/100.
     self.FLXHUMR = self.ELER/self.RHO/self.EL/100.
-
 
   def wall_road(self):
     T1VC = self.TCP * (1.0 + 0.61 * self.QA)
@@ -544,7 +554,6 @@ class slucm:
     # diagnostic GRID AVERAGED  PSIM  PSIH  TS QS --> WRF
     Z0 = self.Z0C
     Z0H = self.Z0HC
-    
     Z = self.ZA - self.ZDC
     ZNT = Z0
     XXX = 0.4*9.81*Z*TST/self.TA/UST/UST
@@ -650,11 +659,11 @@ class slucm:
     RAH = 1./(self.AK*numpy.sqrt(self.CDC*self.UA*self.UA))*(numpy.log(self.ZA/2.)-PSIHZA+PSIH2M)
     TC2M = self.TA + RAH*(self.W/self.RW*FLXTHB+FLXTHG)
     self.TC2M = self.return_original_shape(TC2M, self.urban, numpy.shape(self.TC2Min))
-
     #nmin = nanmin(self.TC2M[self.TC2M>0], axis=None)
     #nmax = nanmax(self.TC2M[self.TC2M>0], axis=None)
     #print(numpy.nanmean(SH), nmin, nmax)
-    #contourf(range(0,120),range(0,120),self.TC2M-self.TC2Min, numpy.arange(-2,2,0.01))
+    #contourf(range(0,120),range(0,120),self.TC2M, numpy.arange(288,292,0.1))
+    #contourf(range(0,120),range(0,120),self.TC2Min, numpy.arange(288,292,0.1))
     #self.ZA = self.return_original_shape(self.ZA, self.urban, numpy.shape(self.TC2Min))
     #colorbar()
     #show()
