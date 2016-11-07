@@ -1,15 +1,15 @@
 import numpy
 
 
-def mos(XXX,B1,RIB,Z,Z0,UA,TA,TSF,RHO):
+def mos(B1,RIB,Z,Z0,UA,TA,TSF,RHO):
   # XXX:   z/L (requires iteration by Newton-Rapson method)
   # B1:    Stanton number
   # PSIM:  = PSIX of LSM
   # PSIH:  = PSIT of LSM
-
   # initialize
-  PSIM = numpy.zeros(numpy.shape(XXX))
-  PSIH = numpy.zeros(numpy.shape(XXX))
+  XXX = numpy.zeros(numpy.shape(Z))
+  PSIM = numpy.zeros(numpy.shape(Z))
+  PSIH = numpy.zeros(numpy.shape(Z))
   
   CP = 0.24  # constant
   NEWT_END = 10

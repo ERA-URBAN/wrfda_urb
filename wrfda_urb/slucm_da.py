@@ -42,6 +42,9 @@ class slucm:
     self.QA = ncfile.variables['QVAPOR'][0,0,:][self.urban]
     self.UA = numpy.sqrt((ncfile.variables['U'][0,1,:,:-1][self.urban]**2) +
                          (ncfile.variables['V'][0,1,:-1,:][self.urban]**2))
+    self.WDR = (45./numpy.arctan(1.0)) * numpy.arctan2(
+      ncfile.variables['U'][0,1,:,:-1][self.urban],
+      ncfile.variables['V'][0,1,:-1,:][self.urban]) + 180.
     self.SSG = ncfile2.variables['SWDOWN'][1,:][self.urban]
     self.LLG = ncfile2.variables['GLW'][1,:][self.urban]
     self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
@@ -85,11 +88,9 @@ class slucm:
     self.CHC_URB = ncfile2.variables['CHC_SFCDIF'][1,:][self.urban]
     self.Lambda_P = ncfile.variables['BUILD_AREA_FRACTION'][0,:][self.urban]
     self.urbfrac = ncfile.variables['FRC_URB2D'][0,:][self.urban]
-    self.Lambda_F = [ncfile.variables['LF_URB2D'][0,:][idx][self.urban]
+    self.lf_urb = [ncfile.variables['LF_URB2D'][0,:][idx][self.urban]
                      for idx in range(0,4)]/self.urbfrac
     self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
-    self.XXXB = numpy.zeros(numpy.shape(self.ZR))  # update registry
-    self.XXXG = numpy.zeros(numpy.shape(self.ZR)) # update registry
     self.TC2Min = ncfile2.variables['TC2M_URB'][1,:]
     self.lb_urb = ncfile.variables['BUILD_SURF_RATIO'][0,:][self.urban]
     ncfile.close()
@@ -139,7 +140,8 @@ class slucm:
 
   def return_original_shape(self, values, indices, shape):
     '''
-    desc
+    Return array in the shape supplied, with values at indices,
+    zero everywhere else
     '''
     out = numpy.zeros(shape)
     out[indices] = values
@@ -157,14 +159,12 @@ class slucm:
     self.UC[building_lower] = (self.UR * numpy.exp(-BB*(1.- self.ZC/self.ZR)))[building_lower]
     self.UC[~building_lower] = self.UA[~building_lower] / 2.0
     self.ZC[~building_lower] = self.ZA[~building_lower] / 2.0
-#    else:
-#      # 'Warning ZR + 2m  is larger than the 1st WRF level'
-#      self.ZC = self.ZA / 2.0
-#      self.UC = self.UA / 2.0
 
   def urbparam_init(self):
     SIGMA_ZED = self.STDH_URB
-    self.Lambda_F = numpy.mean(self.Lambda_F, axis=0)
+    self.lambda_f()  # calculate Lambda_F based on wind direction
+    self.Lambda_F = numpy.maximum(0.05, numpy.minimum(0.35, self.Lambda_F))
+    self.ZR = numpy.maximum( 0.01, numpy.minimum( self.ZR, 100.0 ) )
     # Clamp between 10 cm and 20 m
     self.HNORM = 2. * self.ZR * self.urbfrac  / (self.lb_urb - self.Lambda_P)
     # TODO: check if this is correct
@@ -172,8 +172,9 @@ class slucm:
     self.HNORM = numpy.maximum( 0.01, numpy.minimum( 100.0, self.HNORM ) )
     self.HNORM[numpy.isnan(self.HNORM)] = 10
     Lambda_FR = numpy.maximum( 0.05, numpy.minimum( 0.35, self.stdh_urb/self.HNORM ) )
-    #Lambda_FR  = SIGMA_ZED / ( self.road_width + self.roof_width )
-    self.ZDC = self.ZR * (1.0 + (self.alpha_macd ** (-self.Lambda_P)) * (self.Lambda_P - 1.0))
+    self.R = numpy.maximum( numpy.minimum(self.Lambda_P/self.urbfrac, 0.9), 0.1)
+    self.R[self.urbfrac==0] = 0.5  # set to 0.5 for urbfrac=0
+    self.ZDC = self.ZR * (1.0 + (self.alpha_macd ** (-self.R)) * (self.R - 1.0))
     self.Z0C = self.ZR * (1.0 - (self.ZDC/self.ZR)) * numpy.exp(
       -(0.5 * self.beta_macd * self.Cd / (self.VKMC**2) * (1.0-self.ZDC/self.ZR)*self.Lambda_F)**(-0.5))
     self.Z0R = self.ZR * ( 1.0 - self.ZDC/self.ZR ) * numpy.exp(
@@ -181,12 +182,9 @@ class slucm:
     self.Z0HC = 0.1 * self.Z0C
 
   def net_shortwave_ratiation(self):
-    boolean = (self.ZDC+self.Z0C+2 > self.ZA)
-    #self.ZDC[boolean] = (self.ZA-self.Z0C -4)[boolean]
     self.SX = self.SSG/697.7/60.  # downward shortwave radiation [ly/min]
     self.RX = self.LLG/697.7/60.  # download longwave radiation [ly/min]
     self.HGT = self.ZR / self.HNORM # normalized height
-    self.R = self.roof_width/(self.road_width+self.roof_width)  # average normalized width streets
     self.RW = 1 - self.R  # canyon width
     self.W = 2.*1.*self.HGT
     # RJR analytical formulation for wall sky view factor
@@ -301,18 +299,16 @@ class slucm:
                           TH2V,self.UA,self.AKANDA_URBAN,
                           self.CMC_URB,self.CHC_URB)
     ALPHAC = self.RHO * self.CP * self.CHC_URB
-    self.CH_SCHEME = 1 # TODO: hardcode for now
+    self.CH_SCHEME = 0 # TODO: hardcode for now
     if (self.CH_SCHEME == 1):
       Z = self.ZDC
       BHB=numpy.log(self.Z0B/self.Z0HB)/0.4
       BHG=numpy.log(self.Z0G/self.Z0HG)/0.4
       RIBB=(9.8 * 2./(self.TCP+self.TBP))*(self.TCP-self.TBP)*(Z+self.Z0B)/(self.UC*self.UC)
       RIBG=(9.8 * 2./(self.TCP+self.TGP))*(self.TCP-self.TGP)*(Z+self.Z0G)/(self.UC*self.UC)
-      ALPHAB, CDB, self.XXXB, RIBB = mos(self.XXXB,
-                                         BHB,RIBB,Z,self.Z0B,
+      ALPHAB, CDB, self.XXXB, RIBB = mos(BHB,RIBB,Z,self.Z0B,
                                          self.UC,self.TCP,self.TBP,self.RHO)
-      ALPHAG, CDG, self.XXXG, RIBG = mos(self.XXXG,
-                                         BHG,RIBG,Z,self.Z0G,
+      ALPHAG, CDG, self.XXXG, RIBG = mos(BHG,RIBG,Z,self.Z0G,
                                          self.UC,self.TCP,self.TGP,self.RHO)
     else:
       ALPHAB = self.RHO * self.CP * (6.15+4.18*self.UC)/1200.
@@ -320,6 +316,7 @@ class slucm:
       boolean = (self.UC > 5.0)
       ALPHAB[boolean] = (self.RHO*self.CP*(7.51*self.UC**0.78)/1200.)[boolean]
       ALPHAG[boolean]= (self.RHO*self.CP*(7.51*self.UC**0.78)/1200.)[boolean]
+      import pdb; pdb.set_trace()
 
 
     CHC = ALPHAC/self.RHO/self.CP/self.UA
@@ -515,6 +512,41 @@ class slucm:
       self.TCP=self.TC
       self.QCP=self.QC
 
+  def lambda_f(self):
+    # initialize
+    self.Lambda_F = numpy.zeros(numpy.shape(self.urbfrac))
+    # 0/180
+    self.Lambda_F[(self.WDR>=0) & (self.WDR<22.5)] = (
+      self.lf_urb[0]/self.urbfrac)[(self.WDR>=0) & (self.WDR<22.5)]
+    # 45/225
+    self.Lambda_F[(self.WDR>=22.5) & (self.WDR<67.5)] = (
+      self.lf_urb[1]/self.urbfrac)[(self.WDR>=22.5) & (self.WDR<67.5)]
+    # 90/270
+    self.Lambda_F[(self.WDR>=67.5) & (self.WDR<112.5)] = (
+      self.lf_urb[2]/self.urbfrac)[(self.WDR>=67.5) & (self.WDR<112.5)]
+    # 135/315
+    self.Lambda_F[(self.WDR>=112.5) & (self.WDR<157.5)] = (
+      self.lf_urb[3]/self.urbfrac)[(self.WDR>=112.5) & (self.WDR<157.5)]
+    # 0/180
+    self.Lambda_F[(self.WDR>=157.5) & (self.WDR<202.5)] = (
+      self.lf_urb[0]/self.urbfrac)[(self.WDR>=157.5) & (self.WDR<202.5)]
+    # 45/225
+    self.Lambda_F[(self.WDR>=202.5) & (self.WDR<247.5)] = (
+      self.lf_urb[1]/self.urbfrac)[(self.WDR>=202.5) & (self.WDR<247.5)]
+    # 90/270
+    self.Lambda_F[(self.WDR>=247.5) & (self.WDR<292.5)] = (
+      self.lf_urb[2]/self.urbfrac)[(self.WDR>=247.5) & (self.WDR<292.5)]
+    # 135/315
+    self.Lambda_F[(self.WDR>=292.5) & (self.WDR<337.5)] = (
+      self.lf_urb[3]/self.urbfrac)[(self.WDR>=292.5) & (self.WDR<337.5)]
+    # 0/180
+    self.Lambda_F[(self.WDR>=337.5) & (self.WDR<360)] = (
+      self.lf_urb[0]/self.urbfrac)[(self.WDR>=337.5) & (self.WDR<360)]
+    # invalid wind direction, use 0/180 instead
+    self.Lambda_F[isnan(self.WDR)] = (
+      self.lf_urb[0]/self.urbfrac)[isnan(self.WDR)]
+    # set non urban points to 0.1 just to be sure
+    self.Lambda_F[self.urbfrac<=0] = 0.1
 
   def total_fluxes_urban_canopy(self):
     FLXTHB=self.HB/self.RHO/self.CP/100.
@@ -656,14 +688,16 @@ class slucm:
     X = (1.-16.*XXXC2M)**0.25
     PSIH2M[~boolean] = (2.*numpy.log((1.+X*X)/2.))[~boolean]
 
-    RAH = 1./(self.AK*numpy.sqrt(self.CDC*self.UA*self.UA))*(numpy.log(self.ZA/2.)-PSIHZA+PSIH2M)
+    RAH = 1./(self.VKMC*numpy.sqrt(self.CDC*self.UA*self.UA))*(numpy.log(self.ZA/2.)-PSIHZA+PSIH2M)
     TC2M = self.TA + RAH*(self.W/self.RW*FLXTHB+FLXTHG)
     self.TC2M = self.return_original_shape(TC2M, self.urban, numpy.shape(self.TC2Min))
-    #nmin = nanmin(self.TC2M[self.TC2M>0], axis=None)
-    #nmax = nanmax(self.TC2M[self.TC2M>0], axis=None)
-    #print(numpy.nanmean(SH), nmin, nmax)
+    TA = self.return_original_shape(self.TA, self.urban, numpy.shape(self.TC2Min))
+    nmin = nanmin(self.TC2M[self.TC2M>0], axis=None)
+    nmax = nanmax(self.TC2M[self.TC2M>0], axis=None)
+    print(nmin, nmax)
     #contourf(range(0,120),range(0,120),self.TC2M, numpy.arange(288,292,0.1))
-    #contourf(range(0,120),range(0,120),self.TC2Min, numpy.arange(288,292,0.1))
+    #contourf(range(0,120),range(0,120),self.TC2Min-self.TC2M, numpy.arange(-2,2,0.1))
+    #print(numpy.mean((self.TC2Min-self.TC2M)[self.urban], axis=None))
     #self.ZA = self.return_original_shape(self.ZA, self.urban, numpy.shape(self.TC2Min))
     #colorbar()
     #show()
