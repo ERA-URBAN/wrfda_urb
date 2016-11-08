@@ -45,14 +45,14 @@ class slucm:
     self.WDR = (45./numpy.arctan(1.0)) * numpy.arctan2(
       ncfile.variables['U'][0,1,:,:-1][self.urban],
       ncfile.variables['V'][0,1,:-1,:][self.urban]) + 180.
-    self.SSG = ncfile2.variables['SWDOWN'][1,:][self.urban]
-    self.LLG = ncfile2.variables['GLW'][1,:][self.urban]
+    self.SSG = ncfile2.variables['SWDOWN'][-1,:][self.urban]
+    self.LLG = ncfile2.variables['GLW'][-1,:][self.urban]
     self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
     self.TGP = ncfile.variables['TG_URB'][0,:][self.urban]
     self.TCP = ncfile.variables['TC_URB'][0,:][self.urban]
     self.TBP = ncfile.variables['TB_URB'][0,:][self.urban]
     self.QCP = ncfile.variables['QC_URB'][0,:][self.urban]
-    self.Hin = ncfile2.variables['SH_URB'][1,:][self.urban]
+    self.Hin = ncfile2.variables['SH_URB'][-1,:][self.urban]
     self.PS = ncfile.variables['PSFC'][0,:][self.urban]
     # total potential temperature = T+300 WRF ARW user guide
     self.TA = (ncfile.variables['T'][0,1,:][self.urban] + 300)
@@ -82,16 +82,16 @@ class slucm:
                 for idx in range(0,4)]
     self.TGL = [ncfile.variables['TGL_URB'][0,:][idx][self.urban]
                 for idx in range(0,4)]
-    self.CMR_URB = ncfile2.variables['CMR_SFCDIF'][1,:][self.urban]
-    self.CHR_URB = ncfile2.variables['CHR_SFCDIF'][1,:][self.urban]
-    self.CMC_URB = ncfile2.variables['CMC_SFCDIF'][1,:][self.urban]
-    self.CHC_URB = ncfile2.variables['CHC_SFCDIF'][1,:][self.urban]
+    self.CMR_URB = ncfile2.variables['CMR_SFCDIF'][-1,:][self.urban]
+    self.CHR_URB = ncfile2.variables['CHR_SFCDIF'][-1,:][self.urban]
+    self.CMC_URB = ncfile2.variables['CMC_SFCDIF'][-1,:][self.urban]
+    self.CHC_URB = ncfile2.variables['CHC_SFCDIF'][-1,:][self.urban]
     self.Lambda_P = ncfile.variables['BUILD_AREA_FRACTION'][0,:][self.urban]
     self.urbfrac = ncfile.variables['FRC_URB2D'][0,:][self.urban]
     self.lf_urb = [ncfile.variables['LF_URB2D'][0,:][idx][self.urban]
                      for idx in range(0,4)]/self.urbfrac
     self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
-    self.TC2Min = ncfile2.variables['TC2M_URB'][1,:]
+    self.TC2Min = ncfile2.variables['TC2M_URB'][-1,:]
     self.lb_urb = ncfile.variables['BUILD_SURF_RATIO'][0,:][self.urban]
     ncfile.close()
 
@@ -517,34 +517,34 @@ class slucm:
     self.Lambda_F = numpy.zeros(numpy.shape(self.urbfrac))
     # 0/180
     self.Lambda_F[(self.WDR>=0) & (self.WDR<22.5)] = (
-      self.lf_urb[0]/self.urbfrac)[(self.WDR>=0) & (self.WDR<22.5)]
+      self.lf_urb[0][(self.WDR>=0) & (self.WDR<22.5)])
     # 45/225
     self.Lambda_F[(self.WDR>=22.5) & (self.WDR<67.5)] = (
-      self.lf_urb[1]/self.urbfrac)[(self.WDR>=22.5) & (self.WDR<67.5)]
+      self.lf_urb[1][(self.WDR>=22.5) & (self.WDR<67.5)])
     # 90/270
     self.Lambda_F[(self.WDR>=67.5) & (self.WDR<112.5)] = (
-      self.lf_urb[2]/self.urbfrac)[(self.WDR>=67.5) & (self.WDR<112.5)]
+      self.lf_urb[2][(self.WDR>=67.5) & (self.WDR<112.5)])
     # 135/315
     self.Lambda_F[(self.WDR>=112.5) & (self.WDR<157.5)] = (
-      self.lf_urb[3]/self.urbfrac)[(self.WDR>=112.5) & (self.WDR<157.5)]
+      self.lf_urb[3][(self.WDR>=112.5) & (self.WDR<157.5)])
     # 0/180
     self.Lambda_F[(self.WDR>=157.5) & (self.WDR<202.5)] = (
-      self.lf_urb[0]/self.urbfrac)[(self.WDR>=157.5) & (self.WDR<202.5)]
+      self.lf_urb[0][(self.WDR>=157.5) & (self.WDR<202.5)])
     # 45/225
     self.Lambda_F[(self.WDR>=202.5) & (self.WDR<247.5)] = (
-      self.lf_urb[1]/self.urbfrac)[(self.WDR>=202.5) & (self.WDR<247.5)]
+      self.lf_urb[1][(self.WDR>=202.5) & (self.WDR<247.5)])
     # 90/270
     self.Lambda_F[(self.WDR>=247.5) & (self.WDR<292.5)] = (
-      self.lf_urb[2]/self.urbfrac)[(self.WDR>=247.5) & (self.WDR<292.5)]
+      self.lf_urb[2][(self.WDR>=247.5) & (self.WDR<292.5)])
     # 135/315
     self.Lambda_F[(self.WDR>=292.5) & (self.WDR<337.5)] = (
-      self.lf_urb[3]/self.urbfrac)[(self.WDR>=292.5) & (self.WDR<337.5)]
+      self.lf_urb[3][(self.WDR>=292.5) & (self.WDR<337.5)])
     # 0/180
     self.Lambda_F[(self.WDR>=337.5) & (self.WDR<360)] = (
-      self.lf_urb[0]/self.urbfrac)[(self.WDR>=337.5) & (self.WDR<360)]
+      self.lf_urb[0][(self.WDR>=337.5) & (self.WDR<360)])
     # invalid wind direction, use 0/180 instead
     self.Lambda_F[isnan(self.WDR)] = (
-      self.lf_urb[0]/self.urbfrac)[isnan(self.WDR)]
+      self.lf_urb[0][isnan(self.WDR)])
     # set non urban points to 0.1 just to be sure
     self.Lambda_F[self.urbfrac<=0] = 0.1
 
@@ -697,7 +697,7 @@ class slucm:
     print(nmin, nmax)
     #contourf(range(0,120),range(0,120),self.TC2M, numpy.arange(288,292,0.1))
     #contourf(range(0,120),range(0,120),self.TC2Min-self.TC2M, numpy.arange(-2,2,0.1))
-    #print(numpy.mean((self.TC2Min-self.TC2M)[self.urban], axis=None))
+    print(numpy.mean((abs(self.TC2Min-self.TC2M))[self.urban], axis=None))
     #self.ZA = self.return_original_shape(self.ZA, self.urban, numpy.shape(self.TC2Min))
     #colorbar()
     #show()
