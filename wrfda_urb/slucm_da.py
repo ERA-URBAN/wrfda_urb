@@ -39,30 +39,52 @@ class slucm:
     ncfile2 = Dataset(wrfout, 'r')
     self.landuse = ncfile.variables['LU_INDEX'][0,:]
     self.urban = numpy.where(self.landuse == 1)
-    self.QA = ncfile.variables['QVAPOR'][0,0,:][self.urban]
-    self.UA = numpy.sqrt((ncfile.variables['U'][0,1,:,:-1][self.urban]**2) +
-                         (ncfile.variables['V'][0,1,:-1,:][self.urban]**2))
-    self.WDR = (45./numpy.arctan(1.0)) * numpy.arctan2(
-      ncfile.variables['U'][0,1,:,:-1][self.urban],
-      ncfile.variables['V'][0,1,:-1,:][self.urban]) + 180.
+    # QA is specific humidity, see noahdrv [kg/kg]
+    self.QA = ncfile.variables['QVAPOR'][0,1,:][self.urban]/(
+      1+ncfile.variables['QVAPOR'][0,1,:][self.urban])
+    # PRESSURE IN THE MIDDLE OF THE LOWEST LAYER
+    SFCPRES = (ncfile.variables['PSFC'][0,:])[self.urban]
+    pres=  (ncfile.variables['P'][0,0,:][self.urban]) + (
+            ncfile.variables['PB'][0,0,:][self.urban])
+    self.TA = (ncfile.variables['T'][0,0,:][self.urban] + 300)
+    #self.TA = 0.5*(ncfile.variables['T'][0,1,:][self.urban] + 300) + 0.5*(
+    #  ncfile.variables['T'][0,0,:][self.urban] + 300)
+    SFCTMP = self.TA * (pres/1e5)**0.2854
+    self.TA = SFCTMP
+    self.RHOO = SFCPRES / (287.04 * SFCTMP * (1.0+ 0.61 * self.QA)) #[kg/m/m/m]
+    #import pdb; pdb.set_trace()
+
+    self.UA = numpy.sqrt((ncfile.variables['U'][0,0,:,:-1][self.urban]**2) +
+                         (ncfile.variables['V'][0,0,:-1,:][self.urban]**2))
+    self.UA[self.UA<1] = 1  # see noahdrv
+    self.WDR = (180/numpy.pi) * numpy.arctan2(
+      ncfile.variables['U'][0,0,:,:-1][self.urban],
+      ncfile.variables['V'][0,0,:-1,:][self.urban]) + 180.
     self.SSG = ncfile2.variables['SWDOWN'][-1,:][self.urban]
     self.LLG = ncfile2.variables['GLW'][-1,:][self.urban]
+    self.UST = ncfile2.variables['UST'][-1,:][self.urban]
     self.TRP = ncfile.variables['TR_URB'][0,:][self.urban]
     self.TGP = ncfile.variables['TG_URB'][0,:][self.urban]
     self.TCP = ncfile.variables['TC_URB'][0,:][self.urban]
     self.TBP = ncfile.variables['TB_URB'][0,:][self.urban]
     self.QCP = ncfile.variables['QC_URB'][0,:][self.urban]
+    self.UC_urb = ncfile.variables['UC_URB'][0,:][self.urban]
     self.Hin = ncfile2.variables['SH_URB'][-1,:][self.urban]
-    self.PS = ncfile.variables['PSFC'][0,:][self.urban]
+    self.Gurb = ncfile2.variables['G_URB'][-1,:][self.urban]
+    #self.PS = ncfile.variables['PSFC'][0,:][self.urban]
     # total potential temperature = T+300 WRF ARW user guide
-    self.TA = (ncfile.variables['T'][0,1,:][self.urban] + 300)
-    self.STDH_URB = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.RAIN = numpy.zeros(numpy.shape(self.LLG))  # TODO: fix
-    self.RHOO = 1.225 * numpy.ones(numpy.shape(self.LLG))
+    TAV=self.TA*(1+0.61*self.QA)
+    self.PS = self.RHOO*287*TAV/100
     self.RHO = self.RHOO * 0.001  # density of air [g/cm3]
-    self.ZA = (ncfile.variables['PH'][0,1,:][self.urban])/9.81 + (ncfile.variables['PHB'][0,1,:][self.urban])/9.81
+    self.ZA0 = (ncfile.variables['PH'][0,0,:][self.urban])/9.81 + (
+      ncfile.variables['PHB'][0,0,:][self.urban])/9.81
+    self.ZA1 = (ncfile.variables['PH'][0,1,:][self.urban])/9.81 + (
+      ncfile.variables['PHB'][0,1,:][self.urban])/9.81
+    thickness = self.ZA1-self.ZA0
+    self.ZA = 0.5*thickness
     #self.COSZ = ncfile.variables['COSZEN'][0,:][self.urban]
-    self.DELT = 60
+    self.DELT = 1
     self.ZR = ncfile.variables['MH_URB2D'][0,:][self.urban]
     self.LSOLAR = False
     self.UTYPE = 4
@@ -89,7 +111,7 @@ class slucm:
     self.Lambda_P = ncfile.variables['BUILD_AREA_FRACTION'][0,:][self.urban]
     self.urbfrac = ncfile.variables['FRC_URB2D'][0,:][self.urban]
     self.lf_urb = [ncfile.variables['LF_URB2D'][0,:][idx][self.urban]
-                     for idx in range(0,4)]/self.urbfrac
+                   for idx in range(0,4)]/self.urbfrac
     self.stdh_urb = ncfile.variables['STDH_URB2D'][0,:][self.urban]
     self.TC2Min = ncfile2.variables['TC2M_URB'][-1,:]
     self.lb_urb = ncfile.variables['BUILD_SURF_RATIO'][0,:][self.urban]
@@ -113,8 +135,6 @@ class slucm:
     self.ALBV = 0.20
     self.ALBG = 0.20
     self.ALBB = 0.20
-    self.road_width = 9.4  # TODO: calculate
-    self.roof_width = 9.4  # TODO: calculate
     self.beta_macd = 1
     self.alpha_macd = 4.43
     self.Cd = 1.2
@@ -152,25 +172,28 @@ class slucm:
     self.UR = self.UA * numpy.log((self.ZR - self.ZDC)/self.Z0C
                                   )/numpy.log((self.ZA-self.ZDC)/self.Z0C)
     self.ZC = 0.7 * self.ZR
-    self.XLB = 0.4 * (self.ZR - self.ZDC)
+    XLB = 0.4 * (self.ZR - self.ZDC)
     # BB formulation from Inoue (1963)
-    BB = 0.4 * self.ZR / (self.XLB * numpy.log((self.ZR - self.ZDC)/self.Z0C))
+    BB = 0.4 * self.ZR / (XLB * numpy.log((self.ZR - self.ZDC)/self.Z0C))
     self.UC = numpy.zeros(numpy.shape(self.UR))
     self.UC[building_lower] = (self.UR * numpy.exp(-BB*(1.- self.ZC/self.ZR)))[building_lower]
     self.UC[~building_lower] = self.UA[~building_lower] / 2.0
+    #self.UC = self.UC_urb  # TODO
     self.ZC[~building_lower] = self.ZA[~building_lower] / 2.0
 
+
   def urbparam_init(self):
-    SIGMA_ZED = self.STDH_URB
     self.lambda_f()  # calculate Lambda_F based on wind direction
     self.Lambda_F = numpy.maximum(0.05, numpy.minimum(0.35, self.Lambda_F))
     self.ZR = numpy.maximum( 0.01, numpy.minimum( self.ZR, 100.0 ) )
     # Clamp between 10 cm and 20 m
+    boolean = self.lb_urb > self.Lambda_P
     self.HNORM = 2. * self.ZR * self.urbfrac  / (self.lb_urb - self.Lambda_P)
     # TODO: check if this is correct
     self.HNORM[self.HNORM<self.ZR] = self.ZR[self.HNORM<self.ZR]
     self.HNORM = numpy.maximum( 0.01, numpy.minimum( 100.0, self.HNORM ) )
     self.HNORM[numpy.isnan(self.HNORM)] = 10
+    self.HNORM[~boolean] = 10
     Lambda_FR = numpy.maximum( 0.05, numpy.minimum( 0.35, self.stdh_urb/self.HNORM ) )
     self.R = numpy.maximum( numpy.minimum(self.Lambda_P/self.urbfrac, 0.9), 0.1)
     self.R[self.urbfrac==0] = 0.5  # set to 0.5 for urbfrac=0
@@ -180,7 +203,6 @@ class slucm:
     self.Z0R = self.ZR * ( 1.0 - self.ZDC/self.ZR ) * numpy.exp(
       -(0.5 * self.beta_macd * self.Cd / (self.VKMC**2) * ( 1.0-self.ZDC/self.ZR) * Lambda_FR )**(-0.5))
     self.Z0HC = 0.1 * self.Z0C
-
   def net_shortwave_ratiation(self):
     self.SX = self.SSG/697.7/60.  # downward shortwave radiation [ly/min]
     self.RX = self.LLG/697.7/60.  # download longwave radiation [ly/min]
@@ -231,9 +253,9 @@ class slucm:
     T1VR = self.TRP * (1.0 + 0.61 * self.QA)
     TH2V = (self.TA + (0.0098 * self.ZA)) * (1.0 + 0.61 * self.QA)
     # note that CHR_URB contains UA (=CHR_MOS*UA)
-    self.CDR, self.RLMO_CAN = sfcdif_urb(self.ZA,self.Z0R,T1VR,TH2V,
-                                         self.UA,self.AKANDA_URBAN,self.CMR_URB,
-                                         self.CHR_URB)
+    self.CDR, self.RLMO_ROOF = sfcdif_urb(self.ZA,self.Z0R,T1VR,TH2V,
+                                          self.UA,self.AKANDA_URBAN,self.CMR_URB,
+                                          self.CHR_URB)
     ALPHAR = self.RHO * self.CP * self.CHR_URB
     CHR = ALPHAR/self.RHO/self.CP/self.UA
     # Yang, 03/12/2014 -- LH for impervious roof surface
@@ -287,7 +309,6 @@ class slucm:
       self.TR = force_restore(self.CAPR,self.AKSR,self.DELT,
                               self.SR,self.RR,self.HR,self.ELER,
                               self.TRLEND,self.TRP)
-
       self.TRP=self.TR
     self.FLXTHR = self.HR/self.RHO/self.CP/100.
     self.FLXHUMR = self.ELER/self.RHO/self.EL/100.
@@ -310,19 +331,16 @@ class slucm:
                                          self.UC,self.TCP,self.TBP,self.RHO)
       ALPHAG, CDG, self.XXXG, RIBG = mos(BHG,RIBG,Z,self.Z0G,
                                          self.UC,self.TCP,self.TGP,self.RHO)
+
     else:
       ALPHAB = self.RHO * self.CP * (6.15+4.18*self.UC)/1200.
-      ALPHAG=self.RHO*self.CP*(6.15+4.18*self.UC)/1200.
+      ALPHAG = self.RHO * self.CP*(6.15+4.18*self.UC)/1200.
       boolean = (self.UC > 5.0)
       ALPHAB[boolean] = (self.RHO*self.CP*(7.51*self.UC**0.78)/1200.)[boolean]
       ALPHAG[boolean]= (self.RHO*self.CP*(7.51*self.UC**0.78)/1200.)[boolean]
-      import pdb; pdb.set_trace()
-
-
     CHC = ALPHAC/self.RHO/self.CP/self.UA
     CHB = ALPHAB/self.RHO/self.CP/self.UC
     CHG = ALPHAG/self.RHO/self.CP/self.UC
-
     # Yang 10/10/2013 -- LH from impervious wall and ground
     # self.IMP_SCHEME = 1  # TODO: hardcode for now
     if (self.IMP_SCHEME==1):  # TODO: handle IMP_SCHEME !=1
@@ -334,18 +352,18 @@ class slucm:
     # TODO: check if this is correct
     self.TB = self.TBP
     self.TG = self.TGP
-    self.TS_SCHEME=0
+    self.TS_SCHEME=1
     if (self.TS_SCHEME == 1):
       # TB, TG  Solving Non-Linear Simultaneous Equation by Newton-Rapson
       # TBL,TGL Solving Heat Equation by Tri Diagonal Matrix Algorithm
       for idx in range(0,20):
-        ES=6.11*numpy.exp( (2.5*10.**6./461.51)*(self.TBP-273.15)/(273.15*self.TBP) )
-        DESDT=(2.5*10.**6./461.51)*ES/(self.TBP**2.)
+        ES=6.11*numpy.exp( (2.5e6/461.51)*(self.TBP-273.15)/(273.15*self.TBP) )
+        DESDT=(2.5e6/461.51)*ES/(self.TBP**2.)
         QS0B=0.622*ES/(self.PS-0.378*ES)
         DQS0BDTB=DESDT*0.622*self.PS/((self.PS-0.378*ES)**2.)
 
-        ES=6.11*numpy.exp( (2.5*10.**6./461.51)*(self.TGP-273.15)/(273.15*self.TGP) )
-        DESDT=(2.5*10.**6./461.51)*ES/(self.TGP**2.)
+        ES=6.11*numpy.exp( (2.5e6/461.51)*(self.TGP-273.15)/(273.15*self.TGP) )
+        DESDT=(2.5e6/461.51)*ES/(self.TGP**2.)
         QS0G=0.622*ES/(self.PS-0.378*ES)
         DQS0GDTG=DESDT*0.622*self.PS/((self.PS-0.378*ES)**2.)
 
@@ -393,14 +411,13 @@ class slucm:
 
         self.HB = self.RHO*self.CP*CHB*self.UC*(self.TBP-self.TCP)*100.
         self.HG = self.RHO*self.CP*CHG*self.UC*(self.TGP-self.TCP)*100.
-
         DTCDTB = self.W * ALPHAB/(self.RW*ALPHAC+self.RW*ALPHAG+self.W*ALPHAB)
         DTCDTG = self.RW*ALPHAG/(self.RW*ALPHAC+self.RW*ALPHAG+self.W*ALPHAB)
 
         DHBDTB = self.RHO*self.CP*CHB*self.UC*(1.-DTCDTB)*100.
-        DHBDTG = self.RHO*self.CP*CHB*self.UC*(0.-DTCDTG)*100.
+        DHBDTG = self.RHO*self.CP*CHB*self.UC*(-DTCDTG)*100.
         DHGDTG = self.RHO*self.CP*CHG*self.UC*(1.-DTCDTG)*100.
-        DHGDTB = self.RHO*self.CP*CHG*self.UC*(0.-DTCDTB)*100.
+        DHGDTB = self.RHO*self.CP*CHG*self.UC*(-DTCDTB)*100.
 
         self.ELEB = self.RHO*self.EL*CHB*self.UC*BETB*(QS0B-self.QCP)*100.
         self.ELEG = self.RHO*self.EL*CHG*self.UC*BETG*(QS0G-self.QCP)*100.
@@ -409,18 +426,16 @@ class slucm:
         DQCDTG = self.RW*ALPHAG*BETG*DQS0GDTG/(self.RW*ALPHAC+self.RW*ALPHAG*BETG+self.W*ALPHAB*BETB)
 
         DELEBDTB = self.RHO*self.EL*CHB*self.UC*BETB*(DQS0BDTB-DQCDTB)*100.
-        DELEBDTG = self.RHO*self.EL*CHB*self.UC*BETB*(0.-DQCDTG)*100.
+        DELEBDTG = self.RHO*self.EL*CHB*self.UC*BETB*(-DQCDTG)*100.
         DELEGDTG = self.RHO*self.EL*CHG*self.UC*BETG*(DQS0GDTG-DQCDTG)*100.
-        DELEGDTB = self.RHO*self.EL*CHG*self.UC*BETG*(0.-DQCDTB)*100.
+        DELEGDTB = self.RHO*self.EL*CHG*self.UC*BETG*(-DQCDTB)*100.
 
         self.G0B = self.AKSB*(self.TBP-self.TBL[0])/(self.DZB[0]/2.)
         self.G0G = self.AKSG*(self.TGP-self.TGL[0])/(self.DZG[0]/2.)
-
         DG0BDTB = 2.*self.AKSB/self.DZB[0]
         DG0BDTG = 0.
         DG0GDTG = 2.*self.AKSG/self.DZG[0]
         DG0GDTB = 0.
-
         F = self.SB + self.RB - self.HB - self.ELEB - self.G0B
         FX = DRBDTB - DHBDTB - DELEBDTB - DG0BDTB
         FY = DRBDTG - DHBDTG - DELEBDTG - DG0BDTG
@@ -434,7 +449,6 @@ class slucm:
 
         self.TB = self.TBP + DTB
         self.TG = self.TGP + DTG
-
         self.TBP = self.TB
         self.TGP = self.TG
 
@@ -553,6 +567,8 @@ class slucm:
     FLXHUMB=self.ELEB/self.RHO/self.EL/100.
     FLXTHG=self.HG/self.RHO/self.CP/100.
     FLXHUMG=self.ELEG/self.RHO/self.EL/100.
+    print('hb', self.HB[0], self.HG[0])
+    print('flux',FLXTHB[0], FLXTHG[0])
     # TODO: implement green roof option
     if(self.ahoption==1):
       FLXTH  = ( self.R*self.FLXTHR  + self.W*FLXTHB  + self.RW*FLXTHG ) + self.AH/self.RHOO/self.CPP
@@ -567,7 +583,7 @@ class slucm:
     LNET = self.R*self.RR + self.W*self.RB + self.RW*self.RG
 
     # Convert Unit: FLUXES and u* T* q*  --> WRF
-    SH    = FLXTH  * self.RHOO * self.CPP    # Sensible heat flux          [W/m/m]
+    SH    = FLXTH  * self.RHOO * self.CPP    # Sensible heat flux [W/m/m]
     #SHC   = FLXTHC * self.RHOO * self.CPP    # Canyon Sensible heat flux   [W/m/m]
     LH    = FLXHUM * self.RHOO * self.ELL    # Latent heat flux            [W/m/m]
     LH_KINEMATIC = FLXHUM * self.RHOO   # Latent heat, Kinematic      [kg/m/m/s]
@@ -582,7 +598,6 @@ class slucm:
     UST = numpy.sqrt(FLXUV)              # u* [m/s]
     TST = -FLXTH/UST               # T* [K]
     QST = -FLXHUM/UST              # q* [-]
-
     # diagnostic GRID AVERAGED  PSIM  PSIH  TS QS --> WRF
     Z0 = self.Z0C
     Z0H = self.Z0HC
@@ -670,7 +685,6 @@ class slucm:
     # RJR according to Theeuwes et al. (2014)
     XXXCZA = self.ZA*self.RLMO_CAN # ZA/MOL over the canyon
     XXXC2M = 2.*self.RLMO_CAN # 2m/MOL over the canyon
-
     boolean = ( XXXCZA >= 1. )
     XXXCZA[boolean] = 1
     boolean = ( XXXCZA<= -5. )
@@ -679,7 +693,6 @@ class slucm:
     XXXC2M[boolean] = 1
     boolean = ( XXXC2M <= -5. )
     XXXC2M[boolean] = -5
-
     boolean = ( self.RLMO_CAN > 0 )
     PSIHZA[boolean] = (-5. * XXXCZA)[boolean]
     PSIH2M[boolean] = (-5. * XXXC2M)[boolean]
@@ -691,13 +704,14 @@ class slucm:
     RAH = 1./(self.VKMC*numpy.sqrt(self.CDC*self.UA*self.UA))*(numpy.log(self.ZA/2.)-PSIHZA+PSIH2M)
     TC2M = self.TA + RAH*(self.W/self.RW*FLXTHB+FLXTHG)
     self.TC2M = self.return_original_shape(TC2M, self.urban, numpy.shape(self.TC2Min))
-    TA = self.return_original_shape(self.TA, self.urban, numpy.shape(self.TC2Min))
+    TA = self.return_original_shape(SH, self.urban, numpy.shape(self.TC2Min))
+    Hin = self.return_original_shape(self.Hin, self.urban, numpy.shape(self.TC2Min))
     nmin = nanmin(self.TC2M[self.TC2M>0], axis=None)
     nmax = nanmax(self.TC2M[self.TC2M>0], axis=None)
     print(nmin, nmax)
-    #contourf(range(0,120),range(0,120),self.TC2M, numpy.arange(288,292,0.1))
-    #contourf(range(0,120),range(0,120),self.TC2Min-self.TC2M, numpy.arange(-2,2,0.1))
+    #contourf(range(0,120),range(0,120),(TA-Hin), numpy.arange(-50,50,1))
+    contourf(range(0,120),range(0,120),self.TC2Min-self.TC2M, numpy.arange(-0.5,0.5,0.1))
     print(numpy.mean((abs(self.TC2Min-self.TC2M))[self.urban], axis=None))
     #self.ZA = self.return_original_shape(self.ZA, self.urban, numpy.shape(self.TC2Min))
-    #colorbar()
-    #show()
+    colorbar()
+    show()

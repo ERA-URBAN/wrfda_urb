@@ -66,5 +66,4 @@ def mos(B1,RIB,Z,Z0,UA,TA,TSF,RHO):
   TS = 0.4*(TA-TSF)/PSIH       # T*
   CD = US*US/UA**2.            # CD
   ALPHA = RHO*CP*0.4*US/PSIH   # RHO*CP*CH*U
-
   return ALPHA, CD, XXX, RIB

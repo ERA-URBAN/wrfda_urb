@@ -12,7 +12,6 @@ def multi_layer(KM,BOUND,G0,CAP,AKS,TSL,DZ,DELT):
   P = numpy.zeros((KM,) + numpy.shape(G0))
   Q = numpy.zeros((KM,) + numpy.shape(G0))
   X = numpy.zeros((KM,) + numpy.shape(G0))
-
   A[0,:] = 0.0
   B[0,:] = CAP*DZ[0]/DELT +2.*AKS/(DZ[0]+DZ[1])
   C[0,:] = -2.*AKS/(DZ[0]+DZ[1])
