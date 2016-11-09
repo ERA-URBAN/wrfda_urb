@@ -141,10 +141,12 @@ def sfcdif_urb(ZLM,Z0,THZ0,THLM,SFCSPD,AKANDA,AKMS,AKHS):
     AKMS = numpy.maximum(USTARK / SIMM,CXCH)
     AKHS = numpy.maximum(USTARK / SIMH,CXCH)
 
+    boolean = BTGH*AKHS*DTHV != 0.0
+    WSTAR2[boolean] = WWST2* abs(BTGH * AKHS * DTHV)** (2./3.)
+    WSTAR2[~boolean] = 0.0
     RLMN = ELFC * AKHS * DTHV / USTAR **3
     RLMA = RLMO * WOLD+ RLMN * WNEW
     RLMO = RLMA
 
   CD = USTAR*USTAR/SFCSPD**2
-  
   return CD, RLMO
